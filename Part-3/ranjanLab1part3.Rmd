@@ -1,0 +1,88 @@
+```{r}
+require(twitteR)
+#Tweets search has been done repeatedly with different since dates
+tweets <- searchTwitteR("influenza -filter:retweets", n=2500, since="2018-03-04", until="2018-3-05")
+dftweets <- twListToDF(tweets)
+usernames <- dftweets$screenName
+temp_df <- twListToDF(lookupUsers(unique(usernames)))
+write.csv(temp_df, file="4thMarch.csv") 
+
+#All tweets/UserProfiles combined in a single file manually
+userProfiles <- read.csv(file.choose())#UsersProfile.csv 
+userProfiles <- unique(userProfiles)
+library(ggmap)
+require(stringr)
+cleanedLocations <- str_replace_all(userProfiles$location,"[^[:graph:]]", " ")
+pointsDF <- geocode(cleanedLocations)
+pointsDF <- na.omit(pointsDF)
+write.csv(pointsDF, "4thLocations.csv")
+
+#All locations combined manually
+pointsDF <- read.csv(file.choose()) #Locations.csv
+pointsDF
+library(sp)
+library(maps)
+library(maptools)
+
+#SOURCE: stackoverflow
+#https://stackoverflow.com/questions/8751497/latitude-longitude-coordinates-to-state-code-in-r
+
+# Prepare SpatialPolygons object with one SpatialPolygon
+    # per state (plus DC, minus HI & AK)
+    states <- map('state', fill=TRUE, col="transparent", plot=FALSE)
+    IDs <- sapply(strsplit(states$names, ":"), function(x) x[1])
+    states_sp <- map2SpatialPolygons(states, IDs=IDs,
+                     proj4string=CRS("+proj=longlat +datum=WGS84"))
+
+    # Convert pointsDF to a SpatialPoints object 
+    pointsSP <- SpatialPoints(pointsDF, 
+                    proj4string=CRS("+proj=longlat +datum=WGS84"))
+
+    # Use 'over' to get indices of the Polygons object containing each point 
+    indices <- over(pointsSP, states_sp)
+
+    # Return the state names of the Polygons object containing each point
+    stateNames <- sapply(states_sp@polygons, function(x) x@ID)
+    stateNames[indices]
+    
+    finalStates <- na.omit(stateNames[indices])
+    loc_table <- table(finalStates)
+    loc_df <- data.frame(loc_table)
+    
+    
+#SOURCE: stackoverflow
+
+library(ggplot2)
+library(maps)
+#region <- tolower(excelData$STATENAME)
+states <- map_data("state")
+#level<-excelData$ACTIVITY.LEVEL
+geo_data<-data.frame(region=unique(loc_df$finalStates),loc_df$Freq)
+map.df <- merge(states,geo_data, by="region", all.x =T)
+freq<-map.df$loc_df.Freq
+map.df[is.na(map.df)] <- 0
+
+#SOURCE: stackoverflow
+#https://stackoverflow.com/questions/29614972/ggplot-us-state-map-colors-are-fine-polygons-jagged-r
+library(ggplot2)
+library(dplyr)
+
+us <- map_data("state")
+
+arr <- map.df
+
+
+gg <- ggplot()
+gg <- gg + geom_map(data=us, map=us,
+                    aes(x=long, y=lat, map_id=region),
+                    fill="#ffffff", color="#ffffff", size=0.15)
+gg <- gg + geom_map(data=arr, map=us,
+                    aes(fill=freq, map_id=region),
+                    color="#ffffff", size=0.15)
+gg <- gg + scale_fill_continuous(low='thistle2', high='darkred', 
+                                 guide='colorbar')
+gg
+```
+
+
+
